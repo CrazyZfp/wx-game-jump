@@ -18,7 +18,7 @@ EXCLUSION = 1  # 排除异常值个数
 MIN_GRAYSCALE_LIMIT = 5  # 最小灰度限制,用于过滤掉图形边界以外的点,推荐值5
 TIME_INTERVAL = 1.8  # 两次跳跃的间隔时间(秒),推荐不小于1.5,避免模型落地前就开始下一次识别
 
-ADB_PATH = "/home/apps/adb"  # ADB调用路径
+ADB_PATH = "/home/zfp/Apps/adb/platform-tools/adb"  # ADB调用路径
 
 # DEBUG调试参数
 DEBUG_MODE = False  # 是否开启DEBUG模式,开启的话将保存原截图及处理后图片

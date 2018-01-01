@@ -2,3 +2,4 @@
 wx-game-controller.iml
 test.py
 *.png
+__pycache__

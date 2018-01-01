@@ -132,6 +132,8 @@ def get_aim_coordinate(aim_district):
     edge_p_list = aim_district["edge_point_list"]
 
     p_list = quarter_filter(edge_p_list, vertex)
+    if len(p_list) <= 1:
+        raise Exception("BLOCK_NOT_FOUND")
     aim_r_co = (p_list[0][0], p_list[-1][1])
     return aim_r_co
 
@@ -184,9 +186,9 @@ def get_districts_debug(px, img_width, img_height):
                 else:
                     district = current_district(district_lst)
                 add_edge_point(district, cur_point)
+                last_edge_point = cur_point
             else:
                 px[wi, hi] = BLACK_GRAYSCALE
-            last_edge_point = cur_point
             hi += 1
     return district_lst
 
@@ -214,7 +216,6 @@ def get_districts(px, img_width, img_height):
                 add_edge_point(district, cur_point)
                 last_edge_point = cur_point
                 break
-            last_edge_point = cur_point
             hi += 1
     return district_lst
 
@@ -253,6 +254,8 @@ def jump(pic_name=None):
     else:
         district_lst = get_districts(px, width, height)
 
+    # img.show()
+
     aim_co, player_co = get_coordinates(district_lst)
     distance = calculate_distance(aim_co, player_co)
     jump_pixel(distance)
@@ -260,7 +263,7 @@ def jump(pic_name=None):
     if DEBUG_MODE:
         px[aim_co[0], aim_co[1]] = WHITE_GRAYSCALE
         px[player_co[0], player_co[1]] = WHITE_GRAYSCALE
-        img.save(pic_path.replace(".", "-m."))
+        img.save(pic_path.replace(".png", "-m.png"))
         # img.show()
 
 

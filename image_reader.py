@@ -1,14 +1,10 @@
 from PIL import Image, ImageFilter
 from math import floor, sqrt
-from adb_controller import get_cap_bytes, jump_pixel, PIC_DIR
+from adb_controller import get_cap_bytes, jump_pixel
 import time
+from arguements import *
 
-PLAYER_HEIGHT = 200
-SAMPLE_SIZE = 15
-CIRCLE_R = 30
-MODE = 'DEBUG'
-
-if MODE == 'DEBUG':
+if DEBUG_MODE:
     from adb_controller import get_cap_path
 
     pic_path = ''
@@ -28,7 +24,7 @@ def new_district(district_lst):
 
 def judge_district(cur_edge_point, last_edge_point):
     # 如果当前点的x或y坐标与上一个点的x或y坐标差值大于20,则将该点视为新区域的点
-    if abs(last_edge_point[0] - cur_edge_point[0]) > 10 or abs(last_edge_point[1] - cur_edge_point[1]) > 10:
+    if abs(last_edge_point[0] - cur_edge_point[0]) > DIVIDE_X or abs(last_edge_point[1] - cur_edge_point[1]) > DIVIDE_Y:
         return True
     else:
         return False
@@ -63,7 +59,7 @@ def calculate_distance(p1, p2):
     return sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
 
 
-def geometry_data_verify(data_list, std_data=None, tolerance=0.05):
+def geometry_data_verify(data_list, std_data=None, tolerance=TOLERANCE):
     """判断数据集中的数据是否足够接近标准值
        std_data: 标准值. 若未指定，则取data_list中位数做标准值
        tolerance: 误差百分比(默认5%)
@@ -79,7 +75,7 @@ def geometry_data_verify(data_list, std_data=None, tolerance=0.05):
         diff_list.append(abs(d - std_data))
     diff_list.sort()
 
-    for dif in diff_list[:-1]:  # 排除误差最大的值
+    for dif in diff_list[:-EXCLUSION]:  # 排除误差最大的值
         if dif > std_float:
             return False
     return True
@@ -146,7 +142,7 @@ def get_img(pic_name=None):
     :param pic_name: 截图名称
     :return: 原截图经灰度化,FIND_EDGES滤镜,裁剪后的Image对象
     """
-    if MODE == 'DEBUG':
+    if DEBUG_MODE:
         global pic_path
         if pic_name is None:
             pic_path = get_cap_path()
@@ -158,7 +154,41 @@ def get_img(pic_name=None):
 
     img = img.convert("L")
     img = img.filter(ImageFilter.FIND_EDGES)
-    return img.crop((140, 700, 1025, 1200))
+    return img.crop((CROP_X_L, CROP_Y_U, CROP_X_R, CROP_Y_D))
+
+
+def get_districts_debug(px, img_width, img_height):
+    """
+    get_districts的DEBUG模式
+    该模式下将遍历整个px，并将未被收入districts的点设置为纯黑，收入的点设置为纯白，便于debug执行结果
+
+    :param px: 像素点阵
+    :param img_width: 图片宽度
+    :param img_height: 图片高度
+    :return: 图形区域列表
+    """
+    district_lst = []
+    last_edge_point = (0, 0)
+
+    for wi in range(img_width):
+        hi = 0
+        flag = True
+        while hi < img_height:
+            cur_point = (wi, hi)
+            if px[wi, hi] >= MIN_GRAYSCALE_LIMIT and flag:
+                flag = False
+                px[wi, hi] = WHITE_GRAYSCALE
+
+                if judge_district(cur_point, last_edge_point):
+                    district = new_district(district_lst)
+                else:
+                    district = current_district(district_lst)
+                add_edge_point(district, cur_point)
+            else:
+                px[wi, hi] = BLACK_GRAYSCALE
+            last_edge_point = cur_point
+            hi += 1
+    return district_lst
 
 
 def get_districts(px, img_width, img_height):
@@ -174,20 +204,16 @@ def get_districts(px, img_width, img_height):
 
     for wi in range(img_width):
         hi = 0
-        flag = True
         while hi < img_height:
             cur_point = (wi, hi)
-            if px[wi, hi] > 4 and flag:
-                flag = False
-                px[wi, hi] = 255
-
+            if px[wi, hi] >= MIN_GRAYSCALE_LIMIT:
                 if judge_district(cur_point, last_edge_point):
                     district = new_district(district_lst)
                 else:
                     district = current_district(district_lst)
                 add_edge_point(district, cur_point)
-            else:
-                px[wi, hi] = 0
+                last_edge_point = cur_point
+                break
             last_edge_point = cur_point
             hi += 1
     return district_lst
@@ -199,7 +225,7 @@ def get_coordinates(district_lst):
     :param district_lst: 区域列表
     :return: 终点坐标，起点坐标
     """
-    district_lst_filtered = [x for x in district_lst if len(x["edge_point_list"]) > 10]
+    district_lst_filtered = [x for x in district_lst if len(x["edge_point_list"]) >= MIN_POINTS_LIMIT]
     district_lst_filtered.sort(key=lambda x: x['vertex_y'])
     # district_lst_filtered[0] 可能是目标物块的边界，也可能是玩家模型头部边界
     # 若district_lst_filtered[0] 不是目标物块边界，则district_lst_filtered[1]一定是目标块边界
@@ -222,20 +248,23 @@ def jump(pic_name=None):
     px = img.load()
     width, height = img.size
 
-    district_lst = get_districts(px, width, height)
+    if DEBUG_MODE:
+        district_lst = get_districts_debug(px, width, height)
+    else:
+        district_lst = get_districts(px, width, height)
+
     aim_co, player_co = get_coordinates(district_lst)
     distance = calculate_distance(aim_co, player_co)
     jump_pixel(distance)
 
-    if MODE == 'DEBUG':
-        px[aim_co[0], aim_co[1]] = 255
-        px[player_co[0], player_co[1]] = 255
+    if DEBUG_MODE:
+        px[aim_co[0], aim_co[1]] = WHITE_GRAYSCALE
+        px[player_co[0], player_co[1]] = WHITE_GRAYSCALE
         img.save(pic_path.replace(".", "-m."))
         # img.show()
 
 
 if __name__ == "__main__":
     while True:
-        # jump("1514787541.png")
-        jump()
-        time.sleep(1.8)
+        jump(PIC_NAME)
+        time.sleep(TIME_INTERVAL)

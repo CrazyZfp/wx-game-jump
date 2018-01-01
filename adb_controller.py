@@ -2,11 +2,7 @@ from subprocess import check_output
 import io
 import time
 from math import floor
-
-MS_PER_PIX = 1.4    # 1px距离需要长按约1.4ms
-
-ADB_PATH = "/home/zfp/Apps/adb/platform-tools/adb"
-PIC_DIR = "/home/zfp/Coding/Projects/wx-game-controller/pic"
+from arguements import MS_PER_PIX, ADB_PATH, PIC_DIR
 
 
 def get_cap_path():

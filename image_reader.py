@@ -1,38 +1,36 @@
 from PIL import Image, ImageFilter
 from math import floor, sqrt
-from adb_controller import get_cap_bytes, jump_pixel, get_cap_path
+from adb_controller import get_cap_bytes, jump_pixel, PIC_DIR
 import time
 
 PLAYER_HEIGHT = 200
 SAMPLE_SIZE = 15
 CIRCLE_R = 30
-MODE = 'DEBUG1'
+MODE = 'DEBUG'
 
-district_lst = []
-last_edge_point = (0, 0)
+if MODE == 'DEBUG':
+    from adb_controller import get_cap_path
+
+    pic_path = ''
 
 
-def current_district():
+def current_district(district_lst):
     if len(district_lst) > 0:
         return district_lst[-1]
     else:
-        return new_district()
+        return new_district(district_lst)
 
 
-def new_district():
-    district_lst.append({"edge_point_list": [], "vertex_list": [], "vertex_y": 1000})
+def new_district(district_lst):
+    district_lst.append({"edge_point_list": [], "vertex_list": [], "vertex_y": 10000})
     return district_lst[-1]
 
 
-def judge_district(cur_edge_point):
+def judge_district(cur_edge_point, last_edge_point):
     # 如果当前点的x或y坐标与上一个点的x或y坐标差值大于20,则将该点视为新区域的点
-    if abs(last_edge_point[0] - cur_edge_point[0]) > 20 or abs(last_edge_point[1] - cur_edge_point[1]) > 30:
-        global last_edge_point
-        last_edge_point = cur_edge_point
+    if abs(last_edge_point[0] - cur_edge_point[0]) > 10 or abs(last_edge_point[1] - cur_edge_point[1]) > 10:
         return True
     else:
-        global last_edge_point
-        last_edge_point = cur_edge_point
         return False
 
 
@@ -49,15 +47,19 @@ def add_edge_point(p_district, point):
         p_district["vertex_list"].append(point)
 
 
-def get_absolute_coordinate(r_co):
-    return r_co[0] + 140, r_co[1] + 700
+# def get_absolute_coordinate(r_co):
+#     return r_co[0] + 140, r_co[1] + 700
 
 
 def get_vertex_x(vertex_list):
+    """获取顶点x坐标"""
     return sum(it[0] for it in vertex_list) / len(vertex_list)
 
 
 def calculate_distance(p1, p2):
+    """
+    计算两坐标点间距
+    """
     return sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
 
 
@@ -84,7 +86,7 @@ def geometry_data_verify(data_list, std_data=None, tolerance=0.05):
 
 
 def circle_recognize(p_list):
-    "根据坐标list判断是否是圆（玩家模型头部）"
+    """根据坐标list判断是否是圆（模型头部）"""
 
     vertex = p_list[0]
     center = (vertex[0], vertex[1] + CIRCLE_R)
@@ -100,20 +102,18 @@ def circle_recognize(p_list):
 
 
 def get_player_coordinate(player_district):
-    " 获取用户当前坐标(相对于裁剪后的图片)"
+    """ 获取用户当前坐标(相对于裁剪后的图片)"""
     vertex_list = player_district["vertex_list"]
     vertex = (get_vertex_x(vertex_list), player_district["vertex_y"])
     p_list = quarter_filter(player_district['edge_point_list'], vertex)
-    # p_list = player_district['edge_point_list']
     if len(p_list) > SAMPLE_SIZE and circle_recognize(p_list):
         return vertex[0], vertex[1] + PLAYER_HEIGHT
     else:
         return None
-        # return get_absolute_coordinate(player_r_co)
 
 
 def quarter_filter(edge_p_list, vertex):
-    "在 边界坐标列表 中筛选出目标图形（菱形或椭圆）右上方边界的点集合"
+    """在 边界坐标列表 中筛选出目标图形（菱形或椭圆或圆）右上方约1/4边界的坐标点集合"""
     quarter_p_list = []
     last_y = 0
     for i, p in enumerate(edge_p_list):
@@ -127,88 +127,105 @@ def quarter_filter(edge_p_list, vertex):
 #     return round((point[1] - origin[1]) / (point[0] - origin[0]), 2)
 
 def get_aim_coordinate(aim_district):
+    """
+    获取落点坐标
+    :param aim_district: 落点物块的图形区域
+    :return: 落点坐标
+    """
     vertex = (get_vertex_x(aim_district["vertex_list"]), aim_district["vertex_y"])
     edge_p_list = aim_district["edge_point_list"]
 
-    # 筛选出菱形右上斜边坐标点list
     p_list = quarter_filter(edge_p_list, vertex)
     aim_r_co = (p_list[0][0], p_list[-1][1])
     return aim_r_co
-    # return get_absolute_coordinate(aim_r_co)
-
-    # 在p_list中 等距离 取10个点(含index=0的点)，计算其到顶点vertex（即p_list[0])的斜率是否接近
-    # 接近，可知p_list中坐标构成的是直线
-    # p_amount = len(p_list)
-    # step = 1  # 获取样本点的步长
-    # if p_amount > 10:
-    #     step = p_amount / 10
-    # slop_list = []
-    # for i in range(start=1, stop=9, step=1):
-    #     slop_list.append(calculate_slop(p_list[0], p_list[floor(i * step)]))
-    #
-    # if beenline_recognize(slop_list):
-    #     aim_r_co = (p_list[0][0], p_list[-1][1])
-    #     return get_absolute_coordinate(aim_r_co)
-    # else:
 
 
-def jump():
-    pic_path = ''
-
+def get_img(pic_name=None):
+    """
+    从数据流或文件获取Image对象，并做简单处理
+    :param pic_name: 截图名称
+    :return: 原截图经灰度化,FIND_EDGES滤镜,裁剪后的Image对象
+    """
     if MODE == 'DEBUG':
-        # pic_path = '/home/zfp/Coding/Projects/wx-game-controller/pic/1514785062.png'
-        pic_path = get_cap_path()
+        global pic_path
+        if pic_name is None:
+            pic_path = get_cap_path()
+        else:
+            pic_path = '{pic_dir}/{pic_name}'.format(pic_dir=PIC_DIR, pic_name=pic_name)
         img = Image.open(pic_path)
     else:
         img = Image.open(get_cap_bytes())
 
     img = img.convert("L")
-
     img = img.filter(ImageFilter.FIND_EDGES)
-    img = img.crop((140, 700, 1025, 1200))
+    return img.crop((140, 700, 1025, 1200))
 
-    w, h = img.size
 
-    px = img.load()
-    for wi in range(w):
+def get_districts(px, img_width, img_height):
+    """
+    根据图片像素点灰度值，查找图形边界坐标点，并按一定规则将获得的坐标点划分图形区域
+    :param px: 像素点阵
+    :param img_width: 图片宽度
+    :param img_height: 图片高度
+    :return: 图形区域列表
+    """
+    district_lst = []
+    last_edge_point = (0, 0)
+
+    for wi in range(img_width):
         hi = 0
         flag = True
-        while hi < h:
+        while hi < img_height:
+            cur_point = (wi, hi)
             if px[wi, hi] > 4 and flag:
                 flag = False
                 px[wi, hi] = 255
-                cur_point = (wi, hi)
 
-                if judge_district(cur_point):
-                    district = new_district()
+                if judge_district(cur_point, last_edge_point):
+                    district = new_district(district_lst)
                 else:
-                    district = current_district()
+                    district = current_district(district_lst)
                 add_edge_point(district, cur_point)
             else:
                 px[wi, hi] = 0
+            last_edge_point = cur_point
             hi += 1
+    return district_lst
 
+
+def get_coordinates(district_lst):
+    """
+    由district_lst获取起点坐标和终点坐标
+    :param district_lst: 区域列表
+    :return: 终点坐标，起点坐标
+    """
     district_lst_filtered = [x for x in district_lst if len(x["edge_point_list"]) > 10]
     district_lst_filtered.sort(key=lambda x: x['vertex_y'])
-
-    # district_lst_filtered[0] 可能是目标块的边界，也可能是玩家模型头部边界
-    # 若district_lst_filtered[0] 不是目标块边界，则district_lst_filtered[1]一定是目标块边界
+    # district_lst_filtered[0] 可能是目标物块的边界，也可能是玩家模型头部边界
+    # 若district_lst_filtered[0] 不是目标物块边界，则district_lst_filtered[1]一定是目标块边界
     player_co = get_player_coordinate(district_lst_filtered[0])
-    if player_co == None:
+    if player_co is None:
         aim_co = get_aim_coordinate(district_lst_filtered[0])
         for lst in district_lst_filtered[1:]:
             player_co = get_player_coordinate(lst)
-            if player_co != None:
+            if player_co is not None:
                 break
-        if player_co == None:
+        if player_co is None:
             raise Exception("PLAYER_NOT_FOUND")
     else:
         aim_co = get_aim_coordinate(district_lst_filtered[1])
+    return aim_co, player_co
 
+
+def jump(pic_name=None):
+    img = get_img(pic_name)
+    px = img.load()
+    width, height = img.size
+
+    district_lst = get_districts(px, width, height)
+    aim_co, player_co = get_coordinates(district_lst)
     distance = calculate_distance(aim_co, player_co)
-
     jump_pixel(distance)
-
 
     if MODE == 'DEBUG':
         px[aim_co[0], aim_co[1]] = 255
@@ -218,8 +235,7 @@ def jump():
 
 
 if __name__ == "__main__":
-    while (True):
+    while True:
+        # jump("1514787541.png")
         jump()
-        district_lst.clear()
-        last_edge_point = (0, 0)
-        time.sleep(1.5)
+        time.sleep(1.8)

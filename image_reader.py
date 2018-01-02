@@ -1,7 +1,6 @@
-from PIL import Image, ImageFilter
+from PIL import Image
 from math import floor, sqrt
-from adb_controller import get_cap_bytes, jump_pixel
-import time
+from adb_controller import get_cap_bytes
 from arguements import *
 
 if DEBUG_MODE:
@@ -154,8 +153,8 @@ def get_img(pic_name=None):
     else:
         img = Image.open(get_cap_bytes())
 
-    img = img.convert("L")
-    img = img.filter(ImageFilter.FIND_EDGES)
+    # img = img.convert("L")
+    # img = img.filter(ImageFilter.FIND_EDGES)
     return img.crop((CROP_X_L, CROP_Y_U, CROP_X_R, CROP_Y_D))
 
 
@@ -171,15 +170,19 @@ def get_districts_debug(px, img_width, img_height):
     """
     district_lst = []
     last_edge_point = (0, 0)
+    bg_rgb = px[0, 0]
 
     for wi in range(img_width):
         hi = 0
         flag = True
         while hi < img_height:
             cur_point = (wi, hi)
-            if px[wi, hi] >= MIN_GRAYSCALE_LIMIT and flag:
+            cur_rgb = px[wi, hi]
+            if flag and (abs(cur_rgb[0] - bg_rgb[0]) > MIN_RGB_TOLERANCE or abs(
+                        cur_rgb[1] - bg_rgb[1]) > MIN_RGB_TOLERANCE or abs(
+                    cur_rgb[2] - bg_rgb[2]) > MIN_RGB_TOLERANCE):
                 flag = False
-                px[wi, hi] = WHITE_GRAYSCALE
+                px[wi, hi] = (WHITE_GRAYSCALE, WHITE_GRAYSCALE, WHITE_GRAYSCALE)
 
                 if judge_district(cur_point, last_edge_point):
                     district = new_district(district_lst)
@@ -188,7 +191,7 @@ def get_districts_debug(px, img_width, img_height):
                 add_edge_point(district, cur_point)
                 last_edge_point = cur_point
             else:
-                px[wi, hi] = BLACK_GRAYSCALE
+                px[wi, hi] = (BLACK_GRAYSCALE, BLACK_GRAYSCALE, BLACK_GRAYSCALE)
             hi += 1
     return district_lst
 
@@ -203,12 +206,16 @@ def get_districts(px, img_width, img_height):
     """
     district_lst = []
     last_edge_point = (0, 0)
-
+    bg_rgb = px[0, 0]
     for wi in range(img_width):
         hi = 0
         while hi < img_height:
             cur_point = (wi, hi)
-            if px[wi, hi] >= MIN_GRAYSCALE_LIMIT:
+            cur_rgb = px[wi, hi]
+            # if px[wi, hi] >= MIN_GRAYSCALE_LIMIT:
+            if abs(cur_rgb[0] - bg_rgb[0]) > MIN_RGB_TOLERANCE or abs(
+                            cur_rgb[1] - bg_rgb[1]) > MIN_RGB_TOLERANCE or abs(
+                        cur_rgb[2] - bg_rgb[2]) > MIN_RGB_TOLERANCE:
                 if judge_district(cur_point, last_edge_point):
                     district = new_district(district_lst)
                 else:
@@ -242,32 +249,3 @@ def get_coordinates(district_lst):
     else:
         aim_co = get_aim_coordinate(district_lst_filtered[1])
     return aim_co, player_co
-
-
-def jump(pic_name=None):
-    img = get_img(pic_name)
-    px = img.load()
-    width, height = img.size
-
-    if DEBUG_MODE:
-        district_lst = get_districts_debug(px, width, height)
-    else:
-        district_lst = get_districts(px, width, height)
-
-    # img.show()
-
-    aim_co, player_co = get_coordinates(district_lst)
-    distance = calculate_distance(aim_co, player_co)
-    jump_pixel(distance)
-
-    if DEBUG_MODE:
-        px[aim_co[0], aim_co[1]] = WHITE_GRAYSCALE
-        px[player_co[0], player_co[1]] = WHITE_GRAYSCALE
-        img.save(pic_path.replace(".png", "-m.png"))
-        # img.show()
-
-
-if __name__ == "__main__":
-    while True:
-        jump(PIC_NAME)
-        time.sleep(TIME_INTERVAL)

@@ -12,6 +12,7 @@ Python包依赖： Pillow<br>
 
 ### Usage
 ``` python ./image_reader.py ```<br>
+
 可以根据运行情况,调整arguement.py中的各项参数<br>
 如需保存原始截图及处理后的图片,请将DEBUG_MODE设置为True<br>
 如需调试指定截图,请将DEBUG_MODE设置为True,同时设置PIC_NAME
